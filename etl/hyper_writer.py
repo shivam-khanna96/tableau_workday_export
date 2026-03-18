@@ -7,7 +7,6 @@ Desktop/Cloud never reads a partially-written file.
 from __future__ import annotations
 
 import os
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -56,11 +55,38 @@ def _build_table_def(df: pd.DataFrame, table_name: str) -> TableDefinition:
     return TableDefinition(TableName("Extract", table_name), columns)
 
 
+def _sanitize_value(v: object) -> object:
+    """
+    Convert any NaN/NA sentinel to Python None so Hyper's text inserter
+    never receives a float where it expects str | None.
+
+    Root cause: object-dtype columns that contain a mix of strings and
+    missing values store those missing values as float('nan').
+    pd.notna() / .where() does NOT reliably convert them to None when the
+    column dtype is object, so we handle it explicitly here.
+    """
+    if v is None:
+        return None
+    # float('nan') is the sentinel pandas uses for missing values in
+    # object-dtype columns (e.g. a date column with some nulls).
+    if isinstance(v, float) and pd.isna(v):
+        return None
+    # Catch any other pandas NA types (pd.NaT, pd.NA, np.nan …)
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        # pd.isna() raises on non-scalar containers — leave them as-is
+        pass
+    return v
+
+
 def _df_to_rows(df: pd.DataFrame) -> list[list]:
     """
     Convert DataFrame to a list of row lists suitable for Hyper Inserter.
-    - NaN / None   → Python None  (Hyper NULL)
-    - datetime64   → Python datetime (Hyper Inserter requires native datetime)
+    - NaN / None / NaT  → Python None  (Hyper NULL)
+    - datetime64        → Python datetime (Hyper Inserter requires native datetime)
+    - object columns with float NaN mixed in → None  (see _sanitize_value)
     """
     result_df = df.copy()
 
@@ -68,9 +94,11 @@ def _df_to_rows(df: pd.DataFrame) -> list[list]:
         if str(result_df[col].dtype).startswith("datetime"):
             result_df[col] = result_df[col].dt.to_pydatetime()
 
-    # Replace NaN with None across the whole frame
-    result_df = result_df.where(pd.notna(result_df), other=None)
-    return result_df.values.tolist()
+    rows = result_df.values.tolist()
+
+    # Final sanitization pass — catches float('nan') in object/text columns
+    # that slip through pandas' .where(pd.notna(...)) on mixed-type columns.
+    return [[_sanitize_value(v) for v in row] for row in rows]
 
 
 class HyperWriter:
