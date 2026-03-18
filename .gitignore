@@ -9,4 +9,5 @@ output/*.hyper.tmp
 logs/
 cache/
 *.parquet
+*.log
 .DS_Store
