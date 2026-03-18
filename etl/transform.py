@@ -6,7 +6,6 @@ every row with an etl_load_timestamp for Tableau freshness indicators.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 
 import pandas as pd
 from loguru import logger
@@ -28,7 +27,10 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
 
     df = _coerce_types(df)
     df = _drop_all_null_rows(df)
-    df["etl_load_timestamp"] = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    # pd.Timestamp scalar → pandas stores the column as datetime64[ns], not object.
+    # Plain datetime.now() would produce object dtype, which the Hyper writer
+    # would then mis-map to SqlType.text() and fail on insert.
+    df["etl_load_timestamp"] = pd.Timestamp.now()
 
     logger.info(f"Transform complete: {len(df)} rows × {len(df.columns)} columns")
     return df
