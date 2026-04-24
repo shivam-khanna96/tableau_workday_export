@@ -1,0 +1,255 @@
+# ==========================================
+# 1. COLUMN PRUNING
+# No columns dropped.
+# ==========================================
+drop_columns:
+  powercampus: []
+  workday: []
+
+# ==========================================
+# 2. SCHEMA MAPPING
+# ONLY mapping columns that perfectly share the same data concept across both systems.
+# ==========================================
+schema_mapping:
+  FIRST_NAME: "first_name"
+  LAST_NAME: "last_name"
+  Personal_EMAIL: "primary_home_email_address"
+  SMU_EMAIL: "primary_work_email_address"
+  PEOPLE_CODE_ID: "workdayid"
+  ORG_NAME_1: "applied_campus"
+  program_name: "program"
+
+# ==========================================
+# 3. RULE ENGINE: STATUS FLAGS
+# Evaluates conditions sequentially using exact PowerCampus codes.
+# ==========================================
+status_rules:
+  qualified_flag:
+    - condition: "APP_DECISION in ['CA', 'RCA', 'DI', 'DNM', 'IV', 'MC', 'WL']"
+      result: 1
+    - condition: "default"
+      result: 0
+
+  admitted_flag:
+    - condition: "APP_DECISION in ['CA', 'RCA', 'MC']"
+      result: 1
+    - condition: "default"
+      result: 0
+
+  waitlist_flag:
+    - condition: "APP_DECISION == 'WL'"
+      result: 1
+    - condition: "default"
+      result: 0
+
+  deposit_flag:
+    - condition: "APP_STATUS in ['DEPC', 'DDC']"
+      result: 1
+    - condition: "default"
+      result: 0
+
+  cf_cri_enrolled_student:
+    - condition: "ENROLL_SEPARATION == 'ENRL'"
+      result: 1
+    - condition: "default"
+      result: 0
+
+# ==========================================
+# 4. PROGRAM DERIVATION RULES (The IF/ELSE Logic)
+# Calculates the PowerCampus Program Name based strictly on native legacy columns.
+# ==========================================
+program_derivation_rules:
+  - condition: "CURRICULUM == 'NRSG2' and DEGREE == 'BS'"
+    result: "Bachelor of Science in Nursing - Oakland"
+  
+  # Accelerated Nursing (Oakland)
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAOAK1'"
+    result: "Bachelor of Science in Nursing Accel. (June - OAK1) - Oakland"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAOAK2'"
+    result: "Bachelor of Science in Nursing Accel. (Oct - OAK2) - Oakland"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAOAK3'"
+    result: "Bachelor of Science in Nursing Accel. (July - OAK3) - Oakland"
+
+  # Accelerated Nursing (San Francisco)
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAPEN1'"
+    result: "Bachelor of Science in Nursing Accel. (June -  PEN1) - San Francisco"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAPEN2'"
+    result: "Bachelor of Science in Nursing Accel. (Jan - PEN2) - San Francisco"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAPEN3'"
+    result: "Bachelor of Science in Nursing Accel. (Apr - PEN3) - San Francisco"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAPEN4'"
+    result: "Bachelor of Science in Nursing Accel. (Nov - PEN4) - San Francisco"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAPEN5'"
+    result: "Bachelor of Science in Nursing Accel. (July - PEN5) - San Francisco"
+
+  # Accelerated Nursing (Sacramento)
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGASAC1'"
+    result: "Bachelor of Science in Nursing Accel. (Jan - SAC1) - Sacramento"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGASAC2'"
+    result: "Bachelor of Science in Nursing Accel. (Sept - SAC2) - Sacramento"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGASAC3'"
+    result: "Bachelor of Science in Nursing Accel. (Apr - SAC3) - Sacramento"
+
+  # Accelerated Nursing (Fresno)
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAFRE1'"
+    result: "Bachelor of Science in Nursing Accel. (Sept - FRE1) - Fresno"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAFRE2'"
+    result: "Bachelor of Science in Nursing Accel. (Oct - FRE2) - Fresno"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAFRE3'"
+    result: "Bachelor of Science in Nursing Accel. (June - FRE3) - Fresno"
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'UGAFRE4'"
+    result: "Bachelor of Science in Nursing Accel. (July - FRE4) - Fresno"
+
+  # Accelerated Nursing (General)
+  - condition: "CURRICULUM == 'NRSGA' and DEGREE == 'BS' and ACADEMIC_SESSION == 'GENERAL'"
+    result: "Bachelor of Science in Nursing Accel. - Academic Session = GENERAL"
+
+  # RN to BSN & Other Undergrad
+  - condition: "CURRICULUM == 'RNBSN' and DEGREE in ['BS', 'BSN']"
+    result: "RN to BSN - Online"
+  - condition: "CURRICULUM == 'KINES' and DEGREE == 'BS' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "BS Kinesiology - Oakland"
+  - condition: "CURRICULUM == 'HS' and DEGREE == 'BACH' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Bachelor of Health Sciences - Oakland"
+  - condition: "CURRICULUM == 'NONE' and DEGREE == 'SS'"
+    result: "Undergraduate Non Degree Seeking - Oakland"
+
+  # Entry Level MSN - Case Management
+  - condition: "CURRICULUM == 'ELCM' and DEGREE == 'MS' and CLASS_LEVEL == 'GRPL' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Entry Level MSN - Case Management (Postlicensure) - Oakland"
+  - condition: "CURRICULUM == 'ELCM' and DEGREE == 'MS' and CLASS_LEVEL == 'GRPL' and ORG_NAME_1 == 'Sacramento Campus'"
+    result: "Entry Level MSN - Case Management (Postlicensure) - Sacramento"
+  - condition: "CURRICULUM == 'ELCM' and DEGREE == 'MS' and CLASS_LEVEL == 'GRPL' and ORG_NAME_1 == 'San Francisco Peninsula Campus'"
+    result: "Entry Level MSN - Case Management (Postlicensure) - Oakland"
+  - condition: "CURRICULUM == 'ELCM' and DEGREE == 'MS' and CLASS_LEVEL == 'GREL' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Entry Level MSN - Case Management (Prelicensure) - Oakland"
+  - condition: "CURRICULUM == 'ELCM' and DEGREE == 'MS' and CLASS_LEVEL == 'GREL' and ORG_NAME_1 == 'Sacramento Campus'"
+    result: "Entry Level MSN - Case Management (Prelicensure) - Sacramento"
+  - condition: "CURRICULUM == 'ELCM' and DEGREE == 'MS' and CLASS_LEVEL == 'GREL' and ORG_NAME_1 == 'San Francisco Peninsula Campus'"
+    result: "Entry Level MSN - Case Management (Prelicensure) - Oakland"
+
+  # Entry Level MSN - FNP
+  - condition: "CURRICULUM == 'ELFNP' and DEGREE == 'MS' and CLASS_LEVEL == 'GRPL' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Entry Level MSN - Family Nurse Practitioner (Postlicensure) - Oakland"
+  - condition: "CURRICULUM == 'ELFNP' and DEGREE == 'MS' and CLASS_LEVEL == 'GRPL' and ORG_NAME_1 == 'Sacramento Campus'"
+    result: "Entry Level MSN - Family Nurse Practitioner (Postlicensure) - Sacramento"
+  - condition: "CURRICULUM == 'ELFNP' and DEGREE == 'MS' and CLASS_LEVEL == 'GRPL' and ORG_NAME_1 == 'San Francisco Peninsula Campus'"
+    result: "Entry Level MSN - Family Nurse Practitioner (Postlicensure) - Oakland"
+  - condition: "CURRICULUM == 'ELFNP' and DEGREE == 'MS' and CLASS_LEVEL == 'GREL' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Entry Level MSN - Family Nurse Practitioner (Prelicensure) - Oakland"
+  - condition: "CURRICULUM == 'ELFNP' and DEGREE == 'MS' and CLASS_LEVEL == 'GREL' and ORG_NAME_1 == 'Sacramento Campus'"
+    result: "Entry Level MSN - Family Nurse Practitioner (Prelicensure) - Sacramento"
+  - condition: "CURRICULUM == 'ELFNP' and DEGREE == 'MS' and CLASS_LEVEL == 'GREL' and ORG_NAME_1 == 'San Francisco Peninsula Campus'"
+    result: "Entry Level MSN - Family Nurse Practitioner (Prelicensure) - Oakland"
+
+  # Master Programs
+  - condition: "CURRICULUM == 'CM' and DEGREE == 'MS'"
+    result: "MSN - Post Professional Case Mangement"
+  - condition: "CURRICULUM == 'CRNA' and DEGREE == 'MS' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "MSN - Certified Registered Nurse Anesthetist - Oakland"
+  - condition: "CURRICULUM == 'FNP' and DEGREE == 'MS' and ORG_NAME_1 == 'Online'"
+    result: "MSN - Family Nurse Practitioner Online - Online"
+  - condition: "CURRICULUM == 'HA' and DEGREE == 'MASTER'"
+    result: "Master of Health Administration - Oakland/Sacramento"
+  - condition: "CURRICULUM == 'OT' and DEGREE == 'MASTER' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Master of Occupational Therapy - Oakland"
+  - condition: "CURRICULUM == 'PA' and DEGREE == 'MASTER' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Master Physician Assistant - Oakland"
+  - condition: "CURRICULUM == 'SW' and DEGREE == 'MASTER' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Master of Social Work - Oakland"
+  - condition: "CURRICULUM == 'BIOMED' and DEGREE == 'MASTER'"
+    result: "Master of Biomedical Sciences"
+  - condition: "CURRICULUM == 'CLE' and DEGREE == 'MS' and ORG_NAME_1 == 'Sacramento Campus'"
+    result: "MSN - Leadership"
+  - condition: "CURRICULUM == 'EL' and DEGREE == 'MS'"
+    result: "MSN - Leadership"
+  - condition: "CURRICULUM == 'PMHNP' and DEGREE == 'MS'"
+    result: "MSN - Psychiatric Mental Health Nurse Practitioner"
+
+  # Certificate Programs
+  - condition: "CURRICULUM == 'FNP' and DEGREE == 'CERT'"
+    result: "Certificate - Family Nurse Practitioner"
+  - condition: "CURRICULUM == 'PMHNP' and DEGREE == 'CERT'"
+    result: "Certificate - Psychiatric Mental Health"
+  - condition: "CURRICULUM == 'PMH' and DEGREE == 'CERT'"
+    result: "Certificate - Psychiatric Mental Health"
+
+  # Doctoral Programs
+  - condition: "CURRICULUM == 'NADNP' and DEGREE == 'DOCTOR' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Doctor of Nurse - Anesthesia - Oakland"
+  - condition: "CURRICULUM == 'OT' and DEGREE == 'DOCTOR' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Doctor of Occupational Therapy - Oakland"
+  - condition: "CURRICULUM == 'PT' and DEGREE == 'DOCTOR' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Doctor of Physical Therapy - Oakland"
+  - condition: "CURRICULUM == 'PM' and DEGREE == 'DOCTOR' and ORG_NAME_1 == 'Oakland Campus'"
+    result: "Doctor of Podiatric Medicine - Oakland"
+  - condition: "CURRICULUM == 'PMBPR' and DEGREE == 'DOCTOR'"
+    result: "Podiatric Medicine Bridge to Podiatric Residency"
+  - condition: "CURRICULUM == 'DNP' and DEGREE == 'DOCTOR'"
+    result: "Doctor of Nursing Practice - Online"
+  - condition: "CURRICULUM == 'FNPDNP' and DEGREE == 'DOCTOR'"
+    result: "Doctor of Nursing Practice - Family Nurse Practitioner - Online"
+  - condition: "CURRICULUM == 'PMHDNP' and DEGREE == 'DOCTOR'"
+    result: "Doctor of Nursing Practice - Psychiatric Mental Health - Online"
+
+  # Catch-all Default
+  - condition: "default"
+    result: "Program Data Entry Error"
+
+# ==========================================
+# 5. PROGRAM TRANSLATION DICTIONARY
+# Maps the precise derived PowerCampus string to the exact Workday string.
+# Ensure the right-side values match the Workday program strings in your system exactly.
+# ==========================================
+program_mapping:
+  default_unmapped: "Program Data Entry Error"
+  maps:
+    "Bachelor of Science in Nursing - Oakland": "Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (June - OAK1) - Oakland": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (Oct - OAK2) - Oakland": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (July - OAK3) - Oakland": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (June -  PEN1) - San Francisco": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (Jan - PEN2) - San Francisco": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (Apr - PEN3) - San Francisco": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (Nov - PEN4) - San Francisco": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (July - PEN5) - San Francisco": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (Jan - SAC1) - Sacramento": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (Sept - SAC2) - Sacramento": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (Apr - SAC3) - Sacramento": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (Sept - FRE1) - Fresno": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (Oct - FRE2) - Fresno": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (June - FRE3) - Fresno": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. (July - FRE4) - Fresno": "Accelerated Bachelor of Science in Nursing"
+    "Bachelor of Science in Nursing Accel. - Academic Session = GENERAL": "Accelerated Bachelor of Science in Nursing"
+    "RN to BSN - Online": "RN to BSN"
+    "BS Kinesiology - Oakland": "BS Kinesiology"
+    "Bachelor of Health Sciences - Oakland": "Bachelor of Health Sciences"
+    "Undergraduate Non Degree Seeking - Oakland": "Undergraduate Non Degree Seeking"
+    "Entry Level MSN - Case Management (Postlicensure) - Oakland": "Entry-Level Master of Science in Nursing - Case Management"
+    "Entry Level MSN - Case Management (Postlicensure) - Sacramento": "Entry-Level Master of Science in Nursing - Case Management"
+    "Entry Level MSN - Case Management (Prelicensure) - Oakland": "Entry-Level Master of Science in Nursing - Case Management"
+    "Entry Level MSN - Case Management (Prelicensure) - Sacramento": "Entry-Level Master of Science in Nursing - Case Management"
+    "Entry Level MSN - Family Nurse Practitioner (Postlicensure) - Oakland": "Entry-Level Master of Science in Nursing - Family Nurse Practitioner"
+    "Entry Level MSN - Family Nurse Practitioner (Postlicensure) - Sacramento": "Entry-Level Master of Science in Nursing - Family Nurse Practitioner"
+    "Entry Level MSN - Family Nurse Practitioner (Prelicensure) - Oakland": "Entry-Level Master of Science in Nursing - Family Nurse Practitioner"
+    "Entry Level MSN - Family Nurse Practitioner (Prelicensure) - Sacramento": "Entry-Level Master of Science in Nursing - Family Nurse Practitioner"
+    "MSN - Post Professional Case Mangement": "MSN - Post Professional Case Mangement"
+    "MSN - Certified Registered Nurse Anesthetist - Oakland": "MSN - Certified Registered Nurse Anesthetist"
+    "MSN - Family Nurse Practitioner Online - Online": "Master of Science in Nursing - Family Nurse Practitioner"
+    "Master of Health Administration - Oakland/Sacramento": "Master of Health Administration"
+    "Master of Occupational Therapy - Oakland": "Master of Occupational Therapy"
+    "Master Physician Assistant - Oakland": "Master Physician Assistant"
+    "Master of Social Work - Oakland": "Master of Social Work"
+    "Master of Biomedical Sciences": "Master of Biomedical Sciences"
+    "MSN - Leadership": "MSN - Leadership"
+    "MSN - Psychiatric Mental Health Nurse Practitioner": "Master of Science in Nursing - Psychiatric Mental Health Nurse Practitioner"
+    "Certificate - Family Nurse Practitioner": "Family Nurse Practitioner Certificate"
+    "Certificate - Psychiatric Mental Health": "Psychiatric Mental Health Nurse Practitioner Certificate"
+    "Doctor of Nurse - Anesthesia - Oakland": "Doctor of Nurse Anesthesia Practice"
+    "Doctor of Occupational Therapy - Oakland": "Doctor of Occupational Therapy"
+    "Doctor of Physical Therapy - Oakland": "Doctor of Physical Therapy"
+    "Doctor of Podiatric Medicine - Oakland": "Doctor of Podiatric Medicine"
+    "Podiatric Medicine Bridge to Podiatric Residency": "Podiatric Medicine Bridge to Podiatric Residency"
+    "Doctor of Nursing Practice - Online": "Doctor of Nursing Practice"
+    "Doctor of Nursing Practice - Family Nurse Practitioner - Online": "Doctor of Nursing Practice - Family Nurse Practitioner"
+    "Doctor of Nursing Practice - Psychiatric Mental Health - Online": "Doctor of Nursing Practice - Psychiatric Mental Health"

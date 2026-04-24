@@ -26,11 +26,14 @@ class TableauCloudPublisher:
         )
         self._server = TSC.Server(settings.server_url, use_server_version=True)
 
-    def publish(self, hyper_path: Path) -> str:
+    def publish(self, hyper_path: Path, target_name: str | None = None) -> str:
         """
         Publish (overwrite) the .hyper file to Tableau Cloud.
         Returns the published data source ID.
         """
+        # Fallback to the default Workday name if no specific target is provided
+        final_ds_name = target_name if target_name else self.settings.datasource_name
+        
         logger.info(
             f"Connecting to Tableau Cloud: {self.settings.server_url} "
             f"(site={self.settings.site_id})"
@@ -41,11 +44,11 @@ class TableauCloudPublisher:
 
             datasource_item = TSC.DatasourceItem(
                 project_id=project_id,
-                name=self.settings.datasource_name,
+                name=final_ds_name, # <-- Uses the dynamically resolved name
             )
 
             logger.info(
-                f"Publishing '{self.settings.datasource_name}' to project "
+                f"Publishing '{final_ds_name}' to project "
                 f"'{self.settings.project_name}' (Overwrite mode) ..."
             )
 
