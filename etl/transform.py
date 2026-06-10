@@ -186,5 +186,11 @@ class UnifiedTransformer:
         df_powercampus['data_source_system'] = 'PowerCampus'
 
         df_unified = pd.concat([df_wd_clean, df_powercampus], ignore_index=True)
-
+        
+        from etl.transform import _coerce_types
+        df_unified = _coerce_types(df_unified)
+        
+        # Add the load timestamp just like the original Workday pipeline did
+        df_unified["etl_load_timestamp"] = pd.Timestamp.now()
+        
         return df_unified
