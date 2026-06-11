@@ -15,6 +15,23 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# Anchor for any path env var that's given as a relative path.
+# config.py lives at <project_root>/etl/config.py, so parent.parent = project root.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_path(value: str | None) -> Path:
+    """
+    Convert an env-string into a Path. Absolute paths are kept as-is;
+    relative paths are resolved against PROJECT_ROOT so the project is
+    portable across machines/users.
+    """
+    if not value:
+        return Path()
+    p = Path(value)
+    return p if p.is_absolute() else (PROJECT_ROOT / p)
+
+
 class ConfigurationError(Exception):
     pass
 
@@ -36,6 +53,17 @@ class TableauSettings:
     project_name: str
     datasource_name: str
     unified_datasource_name: str
+    leads_datasource_name: str
+
+
+@dataclass(frozen=True)
+class SalesforceSettings:
+    username: str
+    password: str
+    security_token: str
+    domain: str  # "login" (prod) or "test" (sandbox)
+    program_mapping_path: Path
+    program_intakes_path: Path
 
 
 @dataclass(frozen=True)
@@ -58,6 +86,7 @@ class OutputSettings:
 class Settings:
     workday: WorkdaySettings
     tableau: TableauSettings
+    salesforce: SalesforceSettings
     alert: AlertSettings
     output: OutputSettings
     mappings: dict
@@ -91,7 +120,17 @@ def load_settings() -> Settings:
         token_value=get("TABLEAU_TOKEN_VALUE"),
         project_name=os.getenv("TABLEAU_PROJECT_NAME", "Default").strip(),
         datasource_name=os.getenv("TABLEAU_DATASOURCE_NAME", "Workday Data").strip(),
-        unified_datasource_name=os.getenv("TABLEAU_UNIFIED_DATASOURCE_NAME", "Unified Admissions Data").strip()
+        unified_datasource_name=os.getenv("TABLEAU_UNIFIED_DATASOURCE_NAME", "Unified Admissions Data").strip(),
+        leads_datasource_name=os.getenv("TABLEAU_LEADS_DATASOURCE_NAME", "Salesforce Leads").strip(),
+    )
+
+    salesforce = SalesforceSettings(
+        username=get("SF_USERNAME"),
+        password=get("SF_PASSWORD"),
+        security_token=get("SF_SECURITY_TOKEN"),
+        domain=os.getenv("SF_DOMAIN", "login").strip(),
+        program_mapping_path=_resolve_path(get("SF_PROGRAM_MAPPING_PATH")),
+        program_intakes_path=_resolve_path(get("SF_PROGRAM_INTAKES_PATH")),
     )
 
     alert = AlertSettings(
@@ -102,8 +141,8 @@ def load_settings() -> Settings:
         to_emails=get("ALERT_TO_EMAILS"),
     )
 
-    output_dir = Path(os.getenv("OUTPUT_DIR", r"D:\SMU\tableau_workday_export\output"))
-    log_dir = Path(os.getenv("LOG_DIR", r"D:\SMU\tableau_workday_export\logs"))
+    output_dir = _resolve_path(os.getenv("OUTPUT_DIR", "output"))
+    log_dir = _resolve_path(os.getenv("LOG_DIR", "logs"))
     retention = int(os.getenv("LOG_RETENTION_DAYS", "30"))
 
     output = OutputSettings(
@@ -118,21 +157,17 @@ def load_settings() -> Settings:
             f"Copy .env.example to .env and fill in the missing values."
         )
 
-    # --- NEW: Load Mappings YAML ---
-    mappings_path_str = os.getenv("MAPPINGS_PATH")
-    if not mappings_path_str:
-        missing.append("MAPPINGS_PATH")
-        mappings_data = {}
-    else:
-        mappings_path = Path(mappings_path_str)
-        if not mappings_path.exists():
-            raise ConfigurationError(f"Mappings file not found at: {mappings_path}")
-        
-        try:
-            with open(mappings_path, 'r') as f:
-                mappings_data = yaml.safe_load(f) or {}
-        except yaml.YAMLError as e:
-            raise ConfigurationError(f"Failed to parse YAML file at {mappings_path}:\n{e}")
+    # --- Load Mappings YAML (path resolves relative to project root) ---
+    mappings_path_str = os.getenv("MAPPINGS_PATH", "mapping.yaml")
+    mappings_path = _resolve_path(mappings_path_str)
+    if not mappings_path.exists():
+        raise ConfigurationError(f"Mappings file not found at: {mappings_path}")
+
+    try:
+        with open(mappings_path, 'r') as f:
+            mappings_data = yaml.safe_load(f) or {}
+    except yaml.YAMLError as e:
+        raise ConfigurationError(f"Failed to parse YAML file at {mappings_path}:\n{e}")
 
     if missing:
         raise ConfigurationError(
@@ -143,4 +178,17 @@ def load_settings() -> Settings:
     output_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    return Settings(workday=workday, tableau=tableau, alert=alert, output=output, mappings=mappings_data)
+    # Validate Salesforce reference-file paths exist (only if the variables were set).
+    for label, p in (("SF_PROGRAM_MAPPING_PATH", salesforce.program_mapping_path),
+                     ("SF_PROGRAM_INTAKES_PATH", salesforce.program_intakes_path)):
+        if str(p) and not p.exists():
+            raise ConfigurationError(f"{label} file not found at: {p}")
+
+    return Settings(
+        workday=workday,
+        tableau=tableau,
+        salesforce=salesforce,
+        alert=alert,
+        output=output,
+        mappings=mappings_data,
+    )

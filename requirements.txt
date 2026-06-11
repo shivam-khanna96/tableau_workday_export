@@ -6,3 +6,5 @@ tableauserverclient>=0.30
 python-dotenv>=1.0.0
 loguru>=0.7.2
 msal>=1.28.0
+simple-salesforce>=1.12.0
+openpyxl>=3.1.0

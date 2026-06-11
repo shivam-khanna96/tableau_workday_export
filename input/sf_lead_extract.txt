@@ -1,0 +1,93 @@
+soql_query_leads = """
+SELECT 
+    Id,
+    LastName,
+    FirstName,
+    Email,
+    Phone,
+    LeadSource,
+    Status,
+    CreatedDate,
+    Are_you_a_Registered_Nurse__c,
+    Program_Name__c,
+    UTM_Source__c,
+    Utm_Campaign__c,
+    Lead_Status__c,
+    Calendly_Session_Scheduled_Date__c,
+    Calendly_Session_Scheduled__c,
+    Event_Name__c,
+    Anticipated_Start_Term__c,
+    Anticipated_Start_Year__c,
+    Preferred_Campus__c,
+    X1st_Call_Date__c,
+    X2nd_Call_Date__c,
+    X3rd_Call_Date__c,
+    X1st_Email_Send_Date__c,
+    X2nd_Email_Send_Date__c,
+    X3rd_Email_Send_Date__c
+FROM Lead
+""" 
+results_leads_raw = sf.query_all(soql_query_leads)
+df_leads = pd.json_normalize(results_leads_raw['records'])
+df_leads.columns = df_leads.columns.str.replace('__c',"", regex=False)
+
+for column in df_leads.columns:
+    if '_Date' in column:
+        df_leads.columns = df_leads.columns.str.replace('X',"", regex=False)
+
+cols_to_check = ['FirstName', 'LastName', 'Email']
+df_leads = df_leads[~df_leads[cols_to_check].apply(lambda row: row.astype(str).str.contains('test', case=False, na=False)).any(axis=1)]
+
+df_leads.loc[:, 'CreatedDateTime'] = pd.to_datetime(df_leads['CreatedDate'])
+df_leads['CreatedDate_Correct'] = df_leads['CreatedDateTime'].dt.date
+df_leads['CreatedTime'] = df_leads['CreatedDateTime'].dt.time
+
+columns_to_drop = ['attributes.type', 'attributes.url', 'CreatedDate', 'CreatedDateTime']
+df_leads.drop(columns_to_drop, axis = 1, inplace = True)
+
+
+df_leads.reset_index(inplace = True, drop = True)
+
+program_list = pd.read_excel(programs_mapping_file, sheet_name='Salesforce')
+disp_codes = pd.read_excel(disp_codes_file, sheet_name = "Disposition Codes")
+
+df_leads.rename({'CreatedDate_Correct': 'CreatedDate', 'Lead_Status' : 'Disposition_Code', 'Status':'Lead_Status'}, inplace = True, axis = 1)
+
+df_leads = df_leads.merge(program_list, on = ['Program_Name'], how = 'left')
+df_leads['Disposition_Code'].fillna('Missing', inplace=True)
+df_leads = df_leads.merge(disp_codes, on = ['Disposition_Code'], how = 'left')
+
+df_leads = df_leads [[
+     'Id',
+     'LastName',
+     'FirstName',
+     'CreatedDate',
+     'CreatedTime',
+     'Email',
+     'Phone',
+     'Are_you_a_Registered_Nurse',
+     'Program_Name',
+     'Corrected_Program_Name',
+     'Preferred_Campus',
+     'LeadSource',
+     'UTM_Source',
+     'Utm_Campaign',
+     'Lead_Status',
+     'Disposition_Code',
+     'Contacted/Not Contacted',
+     'Calendly_Session_Scheduled_Date',
+     'Calendly_Session_Scheduled',
+     'Event_Name',
+     'Anticipated_Start_Term',
+     'Anticipated_Start_Year',
+     '1st_Call_Date',
+     '2nd_Call_Date',
+     '3rd_Call_Date',
+     '1st_Email_Send_Date',
+     '2nd_Email_Send_Date',
+     '3rd_Email_Send_Date']]
+
+df_leads.sort_values(['Email', 'CreatedDate'], inplace = True, axis=0, ignore_index=True)
+df_leads['Are_you_a_Registered_Nurse'].fillna("Missing", inplace = True)
+
+df_leads['Email'] = df_leads['Email'].apply(clean_email)

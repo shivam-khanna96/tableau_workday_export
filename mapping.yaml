@@ -253,3 +253,72 @@ program_mapping:
     "Doctor of Nursing Practice - Online": "Doctor of Nursing Practice"
     "Doctor of Nursing Practice - Family Nurse Practitioner - Online": "Doctor of Nursing Practice - Family Nurse Practitioner"
     "Doctor of Nursing Practice - Psychiatric Mental Health - Online": "Doctor of Nursing Practice - Psychiatric Mental Health"
+
+# ==========================================
+# 6. SALESFORCE LEAD INTAKE-TERM RULES
+# Used when Anticipated_Start_Term__c / Anticipated_Start_Year__c on a Lead
+# are blank or invalid. Each rule key maps to a list of (months, term, year_offset)
+# windows. The matching window is found by the lead's CreatedDate.month, then
+# application_term = f"{term} {created_year + year_offset}".
+# ==========================================
+lead_intake_rules:
+  nursing_prelic:
+    # 12-month-ish lookback, 3 intakes
+    - { months: [4, 5, 6, 7],     term: FALL,   year_offset: 1 }
+    - { months: [8, 9, 10, 11],   term: SPRING, year_offset: 2 }
+    - { months: [12],             term: SUMMER, year_offset: 2 }
+    - { months: [1, 2, 3],        term: SUMMER, year_offset: 1 }
+
+  nursing_postlic:
+    # No lookback (Pre-Lic windows shifted forward by 1 year)
+    - { months: [4, 5, 6, 7],     term: FALL,   year_offset: 0 }
+    - { months: [8, 9, 10, 11],   term: SPRING, year_offset: 1 }
+    - { months: [12],             term: SUMMER, year_offset: 1 }
+    - { months: [1, 2, 3],        term: SUMMER, year_offset: 0 }
+
+  elmsn_split:
+    # ELMSN CM / ELMSN FNP - year split in 2 intakes
+    - { months: [6, 7, 8, 9, 10, 11], term: SPRING, year_offset: 2, derived_campus: Sacramento }
+    - { months: [12],                 term: FALL,   year_offset: 2, derived_campus: Oakland }
+    - { months: [1, 2, 3, 4, 5],      term: FALL,   year_offset: 1, derived_campus: Oakland }
+
+  dnp_anesthesia:
+    # Fall-only, application cycle closes in October
+    - { months: [10, 11, 12],                  term: FALL, year_offset: 2 }
+    - { months: [1, 2, 3, 4, 5, 6, 7, 8, 9],   term: FALL, year_offset: 1 }
+
+  health_sciences_all_intakes:
+    # 12-month lookback (same as nursing_prelic)
+    - { months: [4, 5, 6, 7],     term: FALL,   year_offset: 1 }
+    - { months: [8, 9, 10, 11],   term: SPRING, year_offset: 2 }
+    - { months: [12],             term: SUMMER, year_offset: 2 }
+    - { months: [1, 2, 3],        term: SUMMER, year_offset: 1 }
+
+  health_sciences_fall_only:
+    # 18-month lookback. "Fall 2026 = leads Feb 2025 - Jul 2026"
+    - { months: [8, 9, 10, 11, 12], term: FALL, year_offset: 2 }
+    - { months: [1],                term: FALL, year_offset: 1 }
+    - { months: [2, 3, 4, 5, 6, 7], term: FALL, year_offset: 1 }
+
+  podiatric_bridge:
+    # Summer-only, 12-month lookback
+    - { months: [4, 5, 6, 7, 8, 9, 10, 11, 12], term: SUMMER, year_offset: 1 }
+    - { months: [1, 2, 3],                       term: SUMMER, year_offset: 0 }
+
+  podiatric_dpm:
+    # Fall-only, 18-month lookback (same as health_sciences_fall_only)
+    - { months: [8, 9, 10, 11, 12], term: FALL, year_offset: 2 }
+    - { months: [1],                term: FALL, year_offset: 1 }
+    - { months: [2, 3, 4, 5, 6, 7], term: FALL, year_offset: 1 }
+
+# ==========================================
+# 7. PER-PROGRAM RULE OVERRIDES
+# Workday program name -> rule key in lead_intake_rules.
+# Programs not listed here fall back to (college, licensure) defaults.
+# ==========================================
+lead_program_overrides:
+  "Doctor of Nurse Anesthesia Practice": dnp_anesthesia
+  "Entry-Level Master of Science in Nursing - Case Management": elmsn_split
+  "Entry-Level Master of Science in Nursing - Family Nurse Practitioner": elmsn_split
+  "Doctor of Podiatric Medicine": podiatric_dpm
+  "Bridge to Podiatric Medicine": podiatric_bridge

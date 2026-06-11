@@ -1,7 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pip list:*)"
+      "Bash(pip list:*)",
+      "Bash(python3 *)",
+      "Bash(cd /tmp)",
+      "Bash(rm -rf *)",
+      "Bash(unzip -q \"D:/SMU/tableau_workday_export/input/ProgramMapping.xlsx\")",
+      "Bash(ssconvert -S \"D:/SMU/tableau_workday_export/input/ProgramMapping.xlsx\" /dev/stdout)",
+      "Bash(python -m py_compile main.py etl/sf_extractor.py etl/sf_transform.py etl/config.py)",
+      "Bash(python *)",
+      "Bash(venv/Scripts/python *)",
+      "Bash(where python *)",
+      "Bash(py -c \"import yaml, pyodbc, pandas, simple_salesforce; print\\('all good'\\)\")",
+      "Bash(py --version)",
+      "Bash(C:/Users/shivamkh/AppData/Local/Programs/Python/Python313/python.exe *)"
     ]
   }
 }

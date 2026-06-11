@@ -13,6 +13,7 @@ import os
 import sys
 import time
 from datetime import date
+from pathlib import Path
 
 from loguru import logger
 from dotenv import load_dotenv
@@ -23,6 +24,8 @@ from etl.extractor import WorkdayExtractor, PowerCampusExtractor
 from etl.hyper_writer import HyperWriter
 from etl.logger import init_logger
 from etl.publisher import TableauCloudPublisher
+from etl.sf_extractor import SalesforceExtractor
+from etl.sf_transform import SalesforceTransformer
 from etl.transform import transform, UnifiedTransformer
 
 # Ensure environment variables are loaded
@@ -82,11 +85,12 @@ def main() -> None:
 
         logger.info("--- Writing & Publishing workday.hyper ---")
         hyper_path_wd = writer.write(df_wd_clean, "workday.hyper")
-        publisher.publish(
-            hyper_path_wd, 
-            target_name=settings.tableau.datasource_name
-        )
-        
+        # TROUBLESHOOT MODE — publish disabled
+        # publisher.publish(
+        #     hyper_path_wd,
+        #     target_name=settings.tableau.datasource_name
+        # )
+
         logger.info("Workday pipeline completed successfully.")
 
         # ====================================================================
@@ -114,11 +118,40 @@ def main() -> None:
 
         logger.info("--- Writing & Publishing unified_admissions.hyper ---")
         hyper_path_unified = writer.write(df_unified, "unified_admissions.hyper")
-        
-        publisher.publish(
-            hyper_path_unified, 
-            target_name=settings.tableau.unified_datasource_name
+
+        # TROUBLESHOOT MODE — publish disabled
+        # publisher.publish(
+        #     hyper_path_unified,
+        #     target_name=settings.tableau.unified_datasource_name
+        # )
+
+        # ====================================================================
+        # FLOW 3: SALESFORCE LEADS
+        # Needs df_unified from Flow 2 for the program-switch (email join).
+        # ====================================================================
+        logger.info("--- Starting Salesforce Lead Extraction ---")
+        sf_extractor = SalesforceExtractor(settings.salesforce)
+        df_raw_sf = sf_extractor.extract()
+
+        logger.info("--- Transforming Salesforce Leads ---")
+        sf_transformer = SalesforceTransformer(
+            settings=settings.salesforce,
+            mappings=settings.mappings,
         )
+        df_leads = sf_transformer.transform(df_raw_sf, df_unified)
+
+        # TROUBLESHOOT MODE — dump transformed leads to Excel for inspection
+        troubleshoot_path = Path(__file__).resolve().parent / "input" / "troubleshoot.xlsx"
+        logger.info(f"--- Writing troubleshoot dump to {troubleshoot_path} ---")
+        df_leads.to_excel(troubleshoot_path, index=False)
+
+        logger.info("--- Writing & Publishing salesforce_leads.hyper ---")
+        hyper_path_leads = writer.write(df_leads, "salesforce_leads.hyper")
+        # TROUBLESHOOT MODE — publish disabled
+        # publisher.publish(
+        #     hyper_path_leads,
+        #     target_name=settings.tableau.leads_datasource_name,
+        # )
 
 
         # ====================================================================
@@ -128,7 +161,8 @@ def main() -> None:
         logger.info("=" * 60)
         logger.info(
             f"Pipeline complete. Workday rows={len(df_wd_clean)}, "
-            f"Unified rows={len(df_unified)}, duration={elapsed:.1f}s"
+            f"Unified rows={len(df_unified)}, Leads rows={len(df_leads)}, "
+            f"duration={elapsed:.1f}s"
         )
         logger.info("=" * 60)
         sys.exit(0)
