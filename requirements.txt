@@ -6,3 +6,5 @@ tableauserverclient>=0.30
 python-dotenv>=1.0.0
 loguru>=0.7.2
 msal>=1.28.0
+pyodbc>=5.0.0
+PyYAML>=6.0

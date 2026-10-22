@@ -53,7 +53,7 @@ class EmailAlerter:
             <tr><td><b>Log file</b></td><td><code>{log_path}</code></td></tr>
           </table>
           <p style="margin-top:16px; color:#555;">
-            The Workday data source on Tableau Cloud was <b>not updated</b>.<br>
+            One or more data sources on Tableau Cloud were <b>not updated</b> (see Error above).<br>
             The dashboard is showing the previous day&apos;s data.
           </p>
         </body></html>

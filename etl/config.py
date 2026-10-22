@@ -21,7 +21,8 @@ class ConfigurationError(Exception):
 
 @dataclass(frozen=True)
 class WorkdaySettings:
-    url: str
+    admissions_pipeline_report_url: str
+    attrition_report_url: str
     username: str
     password: str
     format: str  # "json" | "csv" | "xml"
@@ -36,6 +37,7 @@ class TableauSettings:
     project_name: str
     datasource_name: str
     unified_datasource_name: str
+    attrition_datasource_name: str
 
 
 @dataclass(frozen=True)
@@ -78,7 +80,8 @@ def load_settings() -> Settings:
         return val
 
     workday = WorkdaySettings(
-        url=get("WORKDAY_URL"),
+        admissions_pipeline_report_url=get("ADMISSIONS_PIPELINE_REPORT_URL"),
+        attrition_report_url=get("ATTRITION_REPORT_URL"),
         username=get("WORKDAY_USERNAME"),
         password=get("WORKDAY_PASSWORD"),
         format=os.getenv("WORKDAY_FORMAT", "json").strip().lower(),
@@ -91,7 +94,8 @@ def load_settings() -> Settings:
         token_value=get("TABLEAU_TOKEN_VALUE"),
         project_name=os.getenv("TABLEAU_PROJECT_NAME", "Default").strip(),
         datasource_name=os.getenv("TABLEAU_DATASOURCE_NAME", "Workday Data").strip(),
-        unified_datasource_name=os.getenv("TABLEAU_UNIFIED_DATASOURCE_NAME", "Unified Admissions Data").strip()
+        unified_datasource_name=os.getenv("TABLEAU_UNIFIED_DATASOURCE_NAME", "Unified Admissions Data").strip(),
+        attrition_datasource_name=os.getenv("TABLEAU_ATTRITION_DATASOURCE_NAME", "Attrition Data").strip(),
     )
 
     alert = AlertSettings(

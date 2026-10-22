@@ -4,16 +4,18 @@ Entry point. Orchestrates extract → transform → write → publish.
 
 Exit codes:
   0  — success
-  1  — pipeline failure (Workday fetch, transform, Hyper write, or Cloud publish)
-  3  — configuration error (missing .env variables)
+  1  — one or more flows failed (admissions/unified or attrition); other flows still ran
+  3  — configuration error (missing .env variables; mid-run config errors still let other flows run)
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
 from datetime import date
 
+import pandas as pd
 from loguru import logger
 from dotenv import load_dotenv
 
@@ -40,6 +42,15 @@ def _try_send_alert(
     except Exception as alert_err:
         logger.warning(f"Could not send failure alert email: {alert_err}")
 
+def _stringify_nested(df: pd.DataFrame) -> pd.DataFrame:
+    """Serialize list/dict cells (Workday multi-instance fields) to JSON text so Hyper can store them."""
+    for col in df.columns:
+        if df[col].map(lambda v: isinstance(v, (list, dict))).any():
+            df[col] = df[col].map(
+                lambda v: json.dumps(v) if isinstance(v, (list, dict)) else v
+            )
+    return df
+
 def main() -> None:
     # ── 1. Load and validate configuration ─────────────────────────────────
     try:
@@ -62,14 +73,22 @@ def main() -> None:
     t_start = time.perf_counter()
     writer = HyperWriter(settings.output.output_dir)
     publisher = TableauCloudPublisher(settings.tableau)
+    wd_extractor = WorkdayExtractor(settings.workday)
+
+    # Each flow runs independently; failures are collected and alerted once at the end
+    failures: list[str] = []
+    config_error = False
+    df_wd_clean = df_unified = df_attrition = None
 
     try:
         # ====================================================================
-        # FLOW 1: THE ORIGINAL WORKDAY PIPELINE
+        # FLOW 1: THE ORIGINAL WORKDAY PIPELINE (ADMISSIONS PIPELINE REPORT)
         # ====================================================================
-        logger.info("--- Starting Workday Extraction ---")
-        wd_extractor = WorkdayExtractor(settings.workday)
-        df_raw_wd = wd_extractor.extract()
+        logger.info("--- Starting Workday Extraction (admissions_pipeline_report) ---")
+        df_raw_wd = wd_extractor.extract(
+            settings.workday.admissions_pipeline_report_url,
+            "admissions_pipeline_report",
+        )
 
         logger.info("--- Transforming Workday Data ---")
         df_wd_clean = transform(df_raw_wd)
@@ -77,7 +96,7 @@ def main() -> None:
         if df_wd_clean.empty:
             raise RuntimeError(
                 "Transform produced an empty DataFrame. "
-                "Check the Workday report URL and credentials."
+                "Check ADMISSIONS_PIPELINE_REPORT_URL and Workday credentials."
             )
 
         logger.info("--- Writing & Publishing workday.hyper ---")
@@ -120,29 +139,66 @@ def main() -> None:
             target_name=settings.tableau.unified_datasource_name
         )
 
-
-        # ====================================================================
-        # COMPLETION
-        # ====================================================================
-        elapsed = time.perf_counter() - t_start
-        logger.info("=" * 60)
-        logger.info(
-            f"Pipeline complete. Workday rows={len(df_wd_clean)}, "
-            f"Unified rows={len(df_unified)}, duration={elapsed:.1f}s"
-        )
-        logger.info("=" * 60)
-        sys.exit(0)
-
     except ConfigurationError as exc:
         logger.critical(f"Configuration error mid-run: {exc}")
-        _try_send_alert(alerter, str(exc), run_id, log_path)
-        sys.exit(3)
+        failures.append(f"Admissions/Unified flow (configuration): {exc}")
+        config_error = True
 
     except Exception as exc:
-        elapsed = time.perf_counter() - t_start
-        logger.exception(f"Pipeline failed after {elapsed:.1f}s: {exc}")
-        _try_send_alert(alerter, str(exc), run_id, log_path)
-        sys.exit(1)
+        logger.exception(f"Admissions/Unified flow failed: {exc}")
+        failures.append(f"Admissions/Unified flow: {exc}")
+
+    try:
+        # ====================================================================
+        # FLOW 3: ATTRITION REPORT (RAW PULL & DUMP, NO TRANSFORMS)
+        # ====================================================================
+        logger.info("--- Starting Workday Extraction (attrition_report) ---")
+        df_attrition = wd_extractor.extract(
+            settings.workday.attrition_report_url,
+            "attrition_report",
+        )
+
+        if df_attrition.empty:
+            raise RuntimeError(
+                "Attrition report returned no rows; skipping publish to avoid "
+                "overwriting existing data. Check ATTRITION_REPORT_URL."
+            )
+
+        df_attrition = _stringify_nested(df_attrition)
+
+        logger.info("--- Writing & Publishing attrition.hyper ---")
+        hyper_path_attr = writer.write(df_attrition, "attrition.hyper")
+        publisher.publish(
+            hyper_path_attr,
+            target_name=settings.tableau.attrition_datasource_name
+        )
+
+        logger.info("Attrition pipeline completed successfully.")
+
+    except Exception as exc:
+        logger.exception(f"Attrition flow failed: {exc}")
+        failures.append(f"Attrition flow: {exc}")
+
+    # ====================================================================
+    # COMPLETION
+    # ====================================================================
+    elapsed = time.perf_counter() - t_start
+
+    def _rows(df) -> str:
+        return str(len(df)) if df is not None else "n/a"
+
+    logger.info("=" * 60)
+    logger.info(
+        f"Pipeline {'finished with failures' if failures else 'complete'}. "
+        f"Workday rows={_rows(df_wd_clean)}, Unified rows={_rows(df_unified)}, "
+        f"Attrition rows={_rows(df_attrition)}, duration={elapsed:.1f}s"
+    )
+    logger.info("=" * 60)
+
+    if failures:
+        _try_send_alert(alerter, " | ".join(failures), run_id, log_path)
+        sys.exit(3 if config_error else 1)
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()

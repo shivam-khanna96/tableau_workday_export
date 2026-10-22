@@ -12,8 +12,10 @@ packaging==26.0
 pandas==3.0.1
 pycparser==3.0
 PyJWT==2.12.1
+pyodbc==5.3.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
+PyYAML==6.0.3
 requests==2.32.5
 six==1.17.0
 tableauhyperapi==0.0.24457

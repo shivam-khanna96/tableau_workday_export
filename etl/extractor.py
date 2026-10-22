@@ -41,11 +41,11 @@ class WorkdayExtractor:
         session.mount("http://", adapter)
         return session
 
-    def extract(self) -> pd.DataFrame:
+    def extract(self, url: str, report_name: str) -> pd.DataFrame:
         fmt = self.settings.format
-        logger.info(f"Fetching Workday report [{fmt.upper()}]: {self.settings.url}")
+        logger.info(f"Fetching Workday report '{report_name}' [{fmt.upper()}]: {url}")
 
-        response = self.session.get(self.settings.url, timeout=120)
+        response = self.session.get(url, timeout=120)
         response.raise_for_status()
 
         response.encoding = 'utf-8'
