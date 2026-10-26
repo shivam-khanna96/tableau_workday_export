@@ -165,6 +165,9 @@ def main() -> None:
             )
 
         df_attrition = _stringify_nested(df_attrition)
+        # Same pd.Timestamp scalar as etl_load_timestamp in the other flows, so
+        # the column lands as datetime64[ns] and Hyper maps it to TIMESTAMP.
+        df_attrition["etl_load_timestamp"] = pd.Timestamp.now()
 
         logger.info("--- Writing & Publishing attrition.hyper ---")
         hyper_path_attr = writer.write(df_attrition, "attrition.hyper")
